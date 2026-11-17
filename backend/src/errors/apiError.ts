@@ -1,0 +1,12 @@
+class ApiError extends Error {
+    statusCode: number;
+
+    constructor(statusCode: number, message: string) {
+        super(message);
+        this.statusCode = statusCode;
+
+        Object.setPrototypeOf(this, ApiError.prototype); //makes the custom inheritance behave correctly
+    }
+}
+
+export default ApiError;
