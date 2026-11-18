@@ -1,1 +1,87 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Background tones */
+    --bg: #f5f2ee;
+    --bg-inset: #efebe6;
+    --surface: #fdfcfb;
+    --surface-raised: #ffffff;
+
+    /* Borders */
+    --border: #e3ddd6;
+    --border-soft: #ece8e2;
+    --border-strong: #cec7bd;
+
+    /* Typography */
+    --text-primary: #1a1714;
+    --text-secondary: #625c56;
+    --text-muted: #9b9089;
+    --text-placeholder: #b8b0a8;
+
+    /* Accent — muted lavender/violet */
+    --accent: #7260c8;
+    --accent-hover: #5f4fb3;
+    --accent-light: #eceafa;
+    --accent-ring: #bdb4ec;
+    --accent-muted: #a898e0;
+
+    /* Semantic */
+    --success: #3f7a5a;
+    --success-bg: #ebf5ef;
+    --warning: #8a6020;
+    --warning-bg: #fdf5e6;
+    --danger: #a52828;
+    --danger-bg: #fdf0f0;
+  }
+
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Shared input baseline */
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+    font-size: inherit;
+  }
+}
+
+/* Reusable card surface */
+.card {
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Subtle hover row */
+.row-hover:hover {
+  background-color: var(--bg-inset);
+}
+
+/* Focus ring (accessible) */
+:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

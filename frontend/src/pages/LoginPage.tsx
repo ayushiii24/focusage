@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiRequest } from "../lib/api";
 
-// Expected response from your existing backend login service.
 interface LoginResponse {
   token: string;
   user: {
@@ -15,132 +14,223 @@ interface LoginResponse {
 function LoginPage() {
   const navigate = useNavigate();
 
-  // React state keeps track of what the user types.
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  // These states let us show feedback to the user.
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault(); // Prevent the browser's default form reload.
-
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError("");
     setLoading(true);
 
-try {
-  // Send credentials to our existing Express login endpoint.
-  const result = await apiRequest<LoginResponse>(
-    "/api/auth/login",
-    {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }
-  );
+    try {
+      const result = await apiRequest<LoginResponse>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
 
-  // Save the JWT so apiRequest can attach it to protected requests.
-  localStorage.setItem("focusage-token", result.token);
-
-  // Notify other components that login happened.
-  window.dispatchEvent(new Event("focusage-auth-change"));
-
-  // Return the user to the home page after successful login.
-  navigate("/");
+      localStorage.setItem("focusage-token", result.token);
+      window.dispatchEvent(new Event("focusage-auth-change"));
+      navigate("/");
     } catch (err) {
-      // Display the backend's error message when available.
       setError(
-        err instanceof Error
-          ? err.message
-          : "Login failed. Please try again."
+        err instanceof Error ? err.message : "Login failed. Please try again."
       );
     } finally {
-      // Re-enable the button whether login succeeds or fails.
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
+    <main
+      style={{
+        minHeight: "100vh",
+        backgroundColor: "var(--bg)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "0 24px",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 380,
+        }}
+      >
         {/* Brand */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-slate-900">
+        <div style={{ marginBottom: 32, textAlign: "center" }}>
+          <Link
+            to="/"
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              color: "var(--text-primary)",
+              textDecoration: "none",
+              letterSpacing: "-0.01em",
+            }}
+          >
             Focusage
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Focus better. Get things done.
+          </Link>
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--text-muted)",
+              marginTop: 6,
+            }}
+          >
+            Log in to your account
           </p>
         </div>
 
-        {/* Submit the form through our login handler. */}
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label
-              htmlFor="email"
-              className="mb-2 block text-sm font-medium text-slate-700"
+        {/* Form card */}
+        <div
+          style={{
+            backgroundColor: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            padding: "28px 28px 24px",
+          }}
+        >
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <label
+                htmlFor="email"
+                style={{
+                  display: "block",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: "var(--text-secondary)",
+                  marginBottom: 6,
+                }}
+              >
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{
+                  width: "100%",
+                  fontSize: 13,
+                  padding: "9px 11px",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  backgroundColor: "var(--bg)",
+                  color: "var(--text-primary)",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--accent-ring)")
+                }
+                onBlur={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--border)")
+                }
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                style={{
+                  display: "block",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: "var(--text-secondary)",
+                  marginBottom: 6,
+                }}
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                style={{
+                  width: "100%",
+                  fontSize: 13,
+                  padding: "9px 11px",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  backgroundColor: "var(--bg)",
+                  color: "var(--text-primary)",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--accent-ring)")
+                }
+                onBlur={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--border)")
+                }
+              />
+            </div>
+
+            {error && (
+              <p
+                role="alert"
+                style={{
+                  fontSize: 12,
+                  color: "#b91c1c",
+                  margin: 0,
+                }}
+              >
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: "100%",
+                backgroundColor: "var(--text-primary)",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: 6,
+                padding: "10px 0",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: loading ? "not-allowed" : "pointer",
+                opacity: loading ? 0.6 : 1,
+                transition: "opacity 0.15s",
+                marginTop: 4,
+              }}
             >
-              Email
-            </label>
+              {loading ? "Logging in…" : "Log in"}
+            </button>
+          </form>
+        </div>
 
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="mb-2 block text-sm font-medium text-slate-700"
-            >
-              Password
-            </label>
-
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="••••••••"
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
-            />
-          </div>
-
-          {/* Show API errors without removing the form. */}
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-slate-900 py-3 font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Logging in..." : "Log in"}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-slate-500">
+        <p
+          style={{
+            textAlign: "center",
+            fontSize: 12,
+            color: "var(--text-muted)",
+            marginTop: 16,
+          }}
+        >
           Don't have an account?{" "}
-          <a
-            href="/register"
-            className="font-medium text-slate-900 hover:underline"
+          <Link
+            to="/register"
+            style={{
+              color: "var(--text-secondary)",
+              fontWeight: 500,
+              textDecoration: "underline",
+            }}
           >
             Register
-          </a>
+          </Link>
         </p>
       </div>
     </main>

@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from "react";
 
 type TimerMode = "work" | "break";
 const DURATIONS: Record<TimerMode, number> = {
-  work: 5, // 25 minutes, stored in seconds
+  work: 25 * 60,       // 25 minutes in seconds (keep original value)
   break: 5 * 60, // 5 minutes
 };
+
 // Save a completed focus session for a logged-in user.
 async function recordFocusSession() {
   // Guests can use the timer without creating an API request.
@@ -14,17 +15,21 @@ async function recordFocusSession() {
   try {
     await apiRequest<{ message: string }>("/api/focus-sessions", {
       method: "POST",
-      body: JSON.stringify({
-        durationMinutes: 25,
-      }),
+      body: JSON.stringify({ durationMinutes: 25 }),
     });
-
     console.log("Focus session saved successfully!");
   } catch (error) {
     // Don't let an API failure crash the timer.
     console.error("Failed to save focus session:", error);
   }
 }
+
+// SVG ring constants.
+const RING_RADIUS = 100;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+const SVG_SIZE = 240;
+const CENTER = SVG_SIZE / 2;
+
 function PomodoroTimer() {
   const [mode, setMode] = useState<TimerMode>("work");
   const [secondsLeft, setSecondsLeft] = useState(DURATIONS.work);
@@ -34,41 +39,39 @@ function PomodoroTimer() {
 
   // Run one interval while the timer is active.
   useEffect(() => {
-    // Don't create an interval when paused.
     if (!isRunning) return;
-
     const intervalId = window.setInterval(() => {
-      setSecondsLeft((previous) => {
-        // Stop at zero; never allow negative time.
-        return previous <= 1 ? 0 : previous - 1;
-      });
+      setSecondsLeft((previous) => (previous <= 1 ? 0 : previous - 1));
     }, 1000);
     return () => window.clearInterval(intervalId);
   }, [isRunning]);
+
   // Handle the timer reaching zero separately from the countdown.
-  // Stop the timer when it reaches zero.
   useEffect(() => {
-    // Only handle the moment the timer reaches zero.
     if (secondsLeft !== 0 || !isRunning) return;
-
-    // Stop the countdown.
     setIsRunning(false);
-
-    // Record completed focus sessions, never break sessions.
     if (mode === "work" && !sessionRecordedRef.current) {
-      // Set the guard BEFORE making the API request.
       sessionRecordedRef.current = true;
-
       void recordFocusSession();
     }
   }, [secondsLeft, isRunning, mode]);
 
-  // Convert seconds into MM:SS for display.
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
+  const formattedTime = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
-  const formattedTime =
-    `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  // Progress ring.
+  const totalSeconds = DURATIONS[mode];
+  const progress = secondsLeft / totalSeconds;
+  const strokeDashoffset = RING_CIRCUMFERENCE * (1 - progress);
+
+  const isWork = mode === "work";
+  const isComplete = secondsLeft === 0;
+
+  // Colour tokens.
+  const ringColor = isWork ? "var(--accent)" : "#5a9478";
+  const ringTrack = isWork ? "var(--accent-light)" : "#daeee5";
+  const modeLabel = isWork ? "Focus" : "Break";
 
   function switchMode(nextMode: TimerMode) {
     setIsRunning(false);
@@ -83,64 +86,245 @@ function PomodoroTimer() {
     sessionRecordedRef.current = false;
   }
 
+  const statusText = isComplete
+    ? "Session complete — nice work."
+    : isRunning
+      ? isWork ? "Stay focused." : "Take a breather."
+      : "Ready when you are.";
+
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-sm font-medium text-violet-600">FOCUS TIMER</p>
-
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => switchMode("work")}
-          className={`rounded-lg px-4 py-2 text-sm font-medium ${mode === "work"
-            ? "bg-violet-100 text-violet-700"
-            : "text-slate-500 hover:bg-slate-100"
-            }`}
-        >
-          Focus · 25 min
-        </button>
-
-        <button
-          type="button"
-          onClick={() => switchMode("break")}
-          className={`rounded-lg px-4 py-2 text-sm font-medium ${mode === "break"
-            ? "bg-emerald-100 text-emerald-700"
-            : "text-slate-500 hover:bg-slate-100"
-            }`}
-        >
-          Break · 5 min
-        </button>
+    <section
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
+      }}
+    >
+      {/* Mode selector */}
+      <div
+        style={{
+          display: "inline-flex",
+          gap: 2,
+          backgroundColor: "var(--bg-inset)",
+          borderRadius: 7,
+          padding: 3,
+          marginBottom: 28,
+          border: "1px solid var(--border-soft)",
+        }}
+      >
+        {(["work", "break"] as TimerMode[]).map((m) => {
+          const active = mode === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => switchMode(m)}
+              style={{
+                fontSize: 12,
+                fontWeight: active ? 500 : 400,
+                padding: "5px 16px",
+                borderRadius: 5,
+                border: "none",
+                cursor: "pointer",
+                letterSpacing: "0.01em",
+                backgroundColor: active ? "var(--surface-raised)" : "transparent",
+                color: active ? "var(--text-primary)" : "var(--text-muted)",
+                boxShadow: active ? "0 1px 2px rgba(0,0,0,0.07)" : "none",
+                transition: "all 0.15s",
+              }}
+            >
+              {m === "work" ? "Focus · 25 min" : "Break · 5 min"}
+            </button>
+          );
+        })}
       </div>
 
+      {/* SVG Ring */}
+      <div style={{ position: "relative", width: SVG_SIZE, height: SVG_SIZE }}>
+        <svg
+          width={SVG_SIZE}
+          height={SVG_SIZE}
+          viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}
+          style={{ transform: "rotate(-90deg)" }}
+          aria-hidden="true"
+        >
+          {/* Outer decorative circle (very subtle) */}
+          <circle
+            cx={CENTER}
+            cy={CENTER}
+            r={RING_RADIUS + 14}
+            fill="none"
+            stroke="var(--border-soft)"
+            strokeWidth="1"
+            opacity="0.7"
+          />
+
+          {/* Track ring */}
+          <circle
+            cx={CENTER}
+            cy={CENTER}
+            r={RING_RADIUS}
+            fill="none"
+            stroke={ringTrack}
+            strokeWidth="10"
+            strokeLinecap="round"
+          />
+
+          {/* Progress ring */}
+          <circle
+            cx={CENTER}
+            cy={CENTER}
+            r={RING_RADIUS}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeDasharray={RING_CIRCUMFERENCE}
+            strokeDashoffset={strokeDashoffset}
+            style={{ transition: "stroke-dashoffset 0.9s linear, stroke 0.3s" }}
+          />
+
+          {/* End cap dot at the leading edge */}
+          {progress > 0.01 && progress < 0.99 && (
+            (() => {
+              const angle = (1 - progress) * 2 * Math.PI; // 0 at top after rotation
+              const dotX = CENTER + RING_RADIUS * Math.sin(angle);
+              const dotY = CENTER - RING_RADIUS * Math.cos(angle);
+              return (
+                <circle
+                  cx={dotX}
+                  cy={dotY}
+                  r={5}
+                  fill={ringColor}
+                  style={{ transition: "all 0.9s linear" }}
+                />
+              );
+            })()
+          )}
+        </svg>
+
+        {/* Centred time + label */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 0,
+          }}
+        >
+          <p
+            role="timer"
+            aria-label={`Time remaining: ${minutes} minutes, ${seconds} seconds`}
+            style={{
+              fontSize: 46,
+              fontWeight: 300,
+              letterSpacing: "-0.03em",
+              color: isComplete ? "var(--accent)" : "var(--text-primary)",
+              fontVariantNumeric: "tabular-nums",
+              lineHeight: 1,
+              transition: "color 0.3s",
+            }}
+          >
+            {formattedTime}
+          </p>
+          <p
+            style={{
+              fontSize: 10,
+              color: isWork ? "var(--accent-muted)" : "#7aaa94",
+              marginTop: 8,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              fontWeight: 600,
+            }}
+          >
+            {modeLabel}
+          </p>
+        </div>
+      </div>
+
+      {/* Status line */}
       <p
-        className="mt-6 text-center text-6xl font-bold tabular-nums text-slate-900"
-        role="timer"
-        aria-label={`Time remaining: ${minutes} minutes, ${seconds} seconds`}
+        style={{
+          marginTop: 18,
+          fontSize: 12,
+          color: isComplete ? "var(--success)" : "var(--text-muted)",
+          letterSpacing: "0.01em",
+          textAlign: "center",
+          transition: "color 0.3s",
+          fontStyle: isRunning ? "italic" : "normal",
+        }}
       >
-        {formattedTime}
+        {statusText}
       </p>
 
-      <p className="mt-3 text-center text-sm text-slate-500">
-        {secondsLeft === 0
-          ? "Session complete! Nice work."
-          : isRunning
-            ? mode === "work" ? "Stay with your task." : "Take a breather."
-            : "Ready when you are."}
-      </p>
-
-      <div className="mt-6 flex justify-center gap-3">
+      {/* Controls */}
+      <div
+        style={{
+          marginTop: 22,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        {/* Start / Pause */}
         <button
           type="button"
-          onClick={() => setIsRunning((running) => !running)}
-          disabled={secondsLeft === 0}
-          className="rounded-xl bg-violet-600 px-6 py-3 font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => setIsRunning((r) => !r)}
+          disabled={isComplete}
+          style={{
+            backgroundColor: isRunning ? "var(--text-primary)" : "var(--accent)",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: 7,
+            padding: "10px 32px",
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: isComplete ? "not-allowed" : "pointer",
+            opacity: isComplete ? 0.38 : 1,
+            letterSpacing: "0.02em",
+            transition: "background-color 0.15s, opacity 0.15s",
+            minWidth: 100,
+          }}
+          onMouseEnter={(e) => {
+            if (!isComplete)
+              e.currentTarget.style.opacity = "0.88";
+          }}
+          onMouseLeave={(e) => {
+            if (!isComplete)
+              e.currentTarget.style.opacity = "1";
+          }}
         >
           {isRunning ? "Pause" : "Start"}
         </button>
 
+        {/* Reset */}
         <button
           type="button"
           onClick={resetTimer}
-          className="rounded-xl border border-slate-200 px-6 py-3 font-medium text-slate-700 hover:bg-slate-50"
+          style={{
+            backgroundColor: "transparent",
+            color: "var(--text-secondary)",
+            border: "1px solid var(--border)",
+            borderRadius: 7,
+            padding: "10px 20px",
+            fontSize: 13,
+            fontWeight: 400,
+            cursor: "pointer",
+            transition: "border-color 0.12s, color 0.12s",
+            letterSpacing: "0.01em",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "var(--border-strong)";
+            e.currentTarget.style.color = "var(--text-primary)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.color = "var(--text-secondary)";
+          }}
         >
           Reset
         </button>
