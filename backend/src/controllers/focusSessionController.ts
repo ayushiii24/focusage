@@ -2,35 +2,39 @@
 import { Request, Response } from "express";
 import ApiError from "../errors/apiError.js";
 import {
-    createFocusSession,
+    startFocusSession,
+    pauseFocusSession,
+    abandonFocusSession,
+    resumeFocusSession,
+    completeFocusSession,
     getFocusSessions,
 } from "../services/focusSessionService.js";
 
-// POST: Save a completed focus session.
-export const create = async (req: Request, res: Response) => {
-    const { durationMinutes } = req.body;
+export const start = async (req: Request, res: Response) => {
+    const { taskId } = req.body;
+    if (taskId !== undefined && typeof taskId !== "string") throw new ApiError(400, "Invalid taskId");
+    const session = await startFocusSession(req.user!.userId, taskId);
+    res.status(201).json({ message: "Focus session started", session });
+};
 
-    // Reject missing, non-numeric, or invalid durations.
-    if (
-        typeof durationMinutes !== "number" ||
-        !Number.isInteger(durationMinutes) ||
-        durationMinutes < 1 ||
-        durationMinutes > 25
-    ) {
-        throw new ApiError(400, "Invalid focus session duration");
-    }
+export const pause = async (req: Request, res: Response) => {
+    const session = await pauseFocusSession(req.user!.userId);
+    res.status(200).json({ message: "Focus session paused", session });
+};
 
-    // Get the user ID from authenticated JWT middleware,
-    // never from the request body.
-    const session = await createFocusSession(
-        req.user!.userId,
-        durationMinutes
-    );
+export const abandon = async (req: Request, res: Response) => {
+    await abandonFocusSession(req.user!.userId);
+    res.status(200).json({ message: "Active focus session cleared" });
+};
 
-    res.status(201).json({
-        message: "Focus session recorded successfully",
-        session,
-    });
+export const resume = async (req: Request, res: Response) => {
+    const session = await resumeFocusSession(req.user!.userId);
+    res.status(200).json({ message: "Focus session resumed", session });
+};
+
+export const complete = async (req: Request, res: Response) => {
+    const session = await completeFocusSession(req.user!.userId);
+    res.status(200).json({ message: "Focus session recorded successfully", session });
 };
 
 // GET: Retrieve the authenticated user's focus sessions.

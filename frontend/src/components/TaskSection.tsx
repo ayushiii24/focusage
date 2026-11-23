@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { toTask } from "../types/task";
 import type { ApiTask } from "../types/task";
+import { useTimer } from "../context/TimerContext";
+import { useToast } from "../context/ToastContext";
 
 type Priority = "low" | "medium" | "high";
 type TaskFilter = "all" | "pending" | "completed";
@@ -15,6 +17,11 @@ type Task = {
   completed: boolean;
 };
 
+function toLocalDateTimeValue(date: Date): string {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
 const PRIORITY_DOT: Record<Priority, { color: string; label: string }> = {
   high: { color: "#c0392b", label: "High" },
   medium: { color: "#c07d2b", label: "Med" },
@@ -22,7 +29,9 @@ const PRIORITY_DOT: Record<Priority, { color: string; label: string }> = {
 };
 
 function TaskSection() {
-  // Restore guest tasks from the browser when Focusage opens.
+  const { activeTaskId, setActiveTask } = useTimer();
+  const toast = useToast();
+  //restore guest tasks from the browser when app opens
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
       const savedTasks = localStorage.getItem("focusage-tasks");
@@ -31,56 +40,53 @@ function TaskSection() {
       return [];
     }
   });
+  const tasksRef = useRef(tasks);
+  const taskUpdatesInFlightRef = useRef(new Set<string>());
 
-  const token = localStorage.getItem("focusage-token");
-
-  // Load account tasks from MongoDB after login.
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    async function loadTasks() {
-      try {
-        const result = await apiRequest<{ tasks: ApiTask[] }>("/api/tasks");
-        if (!cancelled) setTasks(result.tasks.map(toTask));
-      } catch (error) {
-        console.error("Failed to load account tasks:", error);
-      }
+  function commitTasks(nextTasks: Task[], announceChange = false) {
+    tasksRef.current = nextTasks;
+    setTasks(nextTasks);
+    if (!localStorage.getItem("focusage-token")) {
+      localStorage.setItem("focusage-tasks", JSON.stringify(nextTasks));
     }
-    void loadTasks();
-    return () => { cancelled = true; };
-  }, [token]);
+    if (announceChange) window.dispatchEvent(new Event("focusage-tasks-change"));
+  }
 
   useEffect(() => {
     let cancelled = false;
+    let loadVersion = 0;
     async function handleAuthChange() {
+      const currentVersion = ++loadVersion;
       const currentToken = localStorage.getItem("focusage-token");
       if (!currentToken) {
         const savedTasks = localStorage.getItem("focusage-tasks");
-        try { setTasks(savedTasks ? JSON.parse(savedTasks) : []); }
-        catch { setTasks([]); }
+        try { commitTasks(savedTasks ? JSON.parse(savedTasks) : []); }
+        catch { commitTasks([]); }
         return;
       }
       try {
         const result = await apiRequest<{ tasks: ApiTask[] }>("/api/tasks");
-        if (!cancelled) setTasks(result.tasks.map(toTask));
+        if (!cancelled && currentVersion === loadVersion && localStorage.getItem("focusage-token") === currentToken) {
+          commitTasks(result.tasks.map(toTask));
+        }
       } catch (error) {
-        if (!cancelled) console.error("Failed to load account tasks:", error);
+        if (!cancelled && currentVersion === loadVersion) console.error("Failed to load account tasks:", error);
       }
     }
     void handleAuthChange();
     window.addEventListener("focusage-auth-change", handleAuthChange);
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key !== "focusage-tasks" || localStorage.getItem("focusage-token")) return;
+      try { commitTasks(event.newValue ? JSON.parse(event.newValue) : []); }
+      catch { commitTasks([]); }
+    };
+    window.addEventListener("storage", handleStorageChange);
     return () => {
       cancelled = true;
       window.removeEventListener("focusage-auth-change", handleAuthChange);
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
-
-  // Persist only guest tasks.
-  useEffect(() => {
-    if (!token) {
-      localStorage.setItem("focusage-tasks", JSON.stringify(tasks));
-    }
-  }, [tasks, token]);
 
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -109,25 +115,30 @@ function TaskSection() {
   async function addTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!title.trim()) return;
+    const deadlineDate = deadline ? new Date(deadline) : null;
+    if (deadlineDate && (!Number.isFinite(deadlineDate.getTime()) || deadlineDate.getTime() <= Date.now())) {
+      toast({ message: "Choose a deadline later than the current time.", variant: "error" });
+      return;
+    }
 
     const currentToken = localStorage.getItem("focusage-token");
 
     if (!currentToken) {
-      setTasks((currentTasks) => [
-        ...currentTasks,
+      commitTasks([
+        ...tasksRef.current,
         { id: crypto.randomUUID(), title: title.trim(), deadline, priority, completed: false },
-      ]);
+      ], true);
     } else {
       try {
-        if (!deadline) { alert("Please choose a deadline for account tasks."); return; }
+        if (!deadline) { toast({ message: "Please choose a deadline for account tasks.", variant: "error" }); return; }
         const result = await apiRequest<{ task: ApiTask }>("/api/tasks", {
           method: "POST",
-          body: JSON.stringify({ title: title.trim(), deadline, priority }),
+          body: JSON.stringify({ title: title.trim(), deadline: deadlineDate!.toISOString(), priority }),
         });
-        setTasks((currentTasks) => [...currentTasks, toTask(result.task)]);
+        commitTasks([...tasksRef.current, toTask(result.task)], true);
       } catch (error) {
         console.error("Failed to create task:", error);
-        alert(error instanceof Error ? error.message : "Could not create task. Please try again.");
+        toast({ message: error instanceof Error ? error.message : "Could not create task. Please try again.", variant: "error" });
         return;
       }
     }
@@ -139,38 +150,42 @@ function TaskSection() {
   }
 
   async function toggleTask(taskId: string) {
-    const task = tasks.find((item) => item.id === taskId);
+    if (taskUpdatesInFlightRef.current.has(taskId)) return;
+    const task = tasksRef.current.find((item) => item.id === taskId);
     if (!task) return;
     const nextCompleted = !task.completed;
     const currentToken = localStorage.getItem("focusage-token");
     if (!currentToken) {
-      setTasks((ct) => ct.map((item) => item.id === taskId ? { ...item, completed: nextCompleted } : item));
+      commitTasks(tasksRef.current.map((item) => item.id === taskId ? { ...item, completed: nextCompleted } : item), true);
       return;
     }
+    taskUpdatesInFlightRef.current.add(taskId);
     try {
       const result = await apiRequest<{ task: ApiTask }>(
         `/api/tasks/${taskId}`,
         { method: "PATCH", body: JSON.stringify({ completed: nextCompleted }) }
       );
-      setTasks((ct) => ct.map((item) => item.id === taskId ? toTask(result.task) : item));
+      commitTasks(tasksRef.current.map((item) => item.id === taskId ? toTask(result.task) : item), true);
     } catch (error) {
       console.error("Failed to update task:", error);
-      alert(error instanceof Error ? error.message : "Could not update task. Please try again.");
+      toast({ message: error instanceof Error ? error.message : "Could not update task. Please try again.", variant: "error" });
+    } finally {
+      taskUpdatesInFlightRef.current.delete(taskId);
     }
   }
 
   async function deleteTask(taskId: string) {
     const currentToken = localStorage.getItem("focusage-token");
     if (!currentToken) {
-      setTasks((ct) => ct.filter((task) => task.id !== taskId));
+      commitTasks(tasksRef.current.filter((task) => task.id !== taskId), true);
       return;
     }
     try {
       await apiRequest<{ message: string; task: ApiTask }>(`/api/tasks/${taskId}`, { method: "DELETE" });
-      setTasks((ct) => ct.filter((task) => task.id !== taskId));
+      commitTasks(tasksRef.current.filter((task) => task.id !== taskId), true);
     } catch (error) {
       console.error("Failed to delete task:", error);
-      alert(error instanceof Error ? error.message : "Could not delete task. Please try again.");
+      toast({ message: error instanceof Error ? error.message : "Could not delete task. Please try again.", variant: "error" });
     }
   }
 
@@ -180,7 +195,7 @@ function TaskSection() {
 
   return (
     <section style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Header with progress */}
+      {/* header with progress */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
           <h2
@@ -204,7 +219,7 @@ function TaskSection() {
           </span>
         </div>
 
-        {/* Progress bar */}
+        {/* progress bar */}
         <div
           style={{
             height: 2,
@@ -225,7 +240,7 @@ function TaskSection() {
         </div>
       </div>
 
-      {/* Add task area */}
+      {/* add task area */}
       <form onSubmit={addTask} style={{ marginBottom: 12 }}>
         <div
           style={{
@@ -278,12 +293,13 @@ function TaskSection() {
           </button>
         </div>
 
-        {/* Deadline + priority: appear when input focused */}
+        {/* deadline + priority: appear when input focused */}
         {formExpanded && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <input
               type="datetime-local"
               value={deadline}
+              min={toLocalDateTimeValue(new Date())}
               onChange={(e) => setDeadline(e.target.value)}
               aria-label="Deadline"
               style={{
@@ -320,7 +336,7 @@ function TaskSection() {
         )}
       </form>
 
-      {/* Filter + sort row */}
+      {/* filter + sort row */}
       <div
         style={{
           display: "flex",
@@ -379,7 +395,7 @@ function TaskSection() {
         </select>
       </div>
 
-      {/* Task list */}
+      {/* task list */}
       <div
         style={{
           flex: 1,
@@ -437,7 +453,7 @@ function TaskSection() {
                   transition: "opacity 0.15s",
                 }}
               >
-                {/* Checkbox */}
+                {/* checkbox */}
                 <input
                   type="checkbox"
                   checked={task.completed}
@@ -453,7 +469,7 @@ function TaskSection() {
                   }}
                 />
 
-                {/* Content */}
+                {/* content */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p
                     style={{
@@ -468,7 +484,7 @@ function TaskSection() {
                     {task.title}
                   </p>
 
-                  {/* Priority + deadline meta row */}
+                  {/* priority + deadline meta row */}
                   <div
                     style={{
                       display: "flex",
@@ -477,7 +493,7 @@ function TaskSection() {
                       marginTop: 2,
                     }}
                   >
-                    {/* Priority dot */}
+                    {/* priority dot */}
                     <span
                       style={{
                         display: "inline-flex",
@@ -513,6 +529,47 @@ function TaskSection() {
                     )}
                   </div>
                 </div>
+
+                {/* focus target button */}
+                {!task.completed && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeTaskId === task.id) {
+                        setActiveTask(null, null);
+                      } else {
+                        setActiveTask(task.id, task.title);
+                      }
+                    }}
+                    title={activeTaskId === task.id ? "Unlink from Timer" : "Focus on this task"}
+                    style={{
+                      background: activeTaskId === task.id ? "var(--accent-light)" : "transparent",
+                      color: activeTaskId === task.id ? "var(--accent)" : "var(--text-placeholder)",
+                      border: activeTaskId === task.id ? "1px solid var(--accent-ring)" : "1px solid transparent",
+                      borderRadius: 4,
+                      padding: "2px 6px",
+                      fontSize: 10,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      transition: "all 0.12s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeTaskId !== task.id) {
+                        e.currentTarget.style.color = "var(--accent)";
+                        e.currentTarget.style.backgroundColor = "var(--bg-inset)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeTaskId !== task.id) {
+                        e.currentTarget.style.color = "var(--text-placeholder)";
+                        e.currentTarget.style.backgroundColor = "transparent";
+                      }
+                    }}
+                  >
+                    {activeTaskId === task.id ? "Active" : "Focus"}
+                  </button>
+                )}
 
                 {/* Delete */}
                 <button

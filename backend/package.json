@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "test": "npm run build && node --test --experimental-test-isolation=none --test-concurrency=1 tests/aiPlannerService.test.mjs",
     "start": "node dist/server.js"
   },
   "keywords": [],

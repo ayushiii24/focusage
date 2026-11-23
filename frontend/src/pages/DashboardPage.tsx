@@ -10,7 +10,6 @@ type FocusSession = {
   completedAt: string;
 };
 
-// Returns the Monday of the week containing `date`.
 function weekStart(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay(); // 0 = Sun
@@ -20,13 +19,12 @@ function weekStart(date: Date): Date {
   return d;
 }
 
-// Returns the ISO date string "YYYY-MM-DD" for a Date.
+
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Day labels for the weekly chart.
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]; //for weekly charts
 
 function DashboardPage() {
   const navigate = useNavigate();
@@ -74,16 +72,15 @@ function DashboardPage() {
     };
   }, [isLoggedIn, navigate]);
 
-  // Derived statistics — only from real data.
+  //derived stats
   const totalMinutes = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
   const totalSessions = sessions.length;
   const completedTasks = tasks.filter((t) => t.completed).length;
 
-  // Weekly focus time (Mon–Sun of the current week).
   const today = new Date();
   const ws = weekStart(today);
 
-  // Build a map of day-index (0=Mon…6=Sun) → minutes.
+  //map of day-index to mins
   const weekMinutes: number[] = new Array(7).fill(0);
   sessions.forEach((s) => {
     const d = new Date(s.completedAt);
@@ -95,13 +92,12 @@ function DashboardPage() {
     }
   });
 
-  const maxWeekMinutes = Math.max(...weekMinutes, 1); // avoid div-by-zero
+  const maxWeekMinutes = Math.max(...weekMinutes, 1);
 
-  // Current streak: consecutive days with at least one session, ending today.
   function computeStreak(): number {
     if (sessions.length === 0) return 0;
 
-    // Collect unique days with sessions.
+    //collect unique days with sessions
     const daysWithSession = new Set(
       sessions.map((s) => isoDate(new Date(s.completedAt)))
     );
@@ -110,7 +106,7 @@ function DashboardPage() {
     const cursor = new Date(today);
     cursor.setHours(0, 0, 0, 0);
 
-    // If today has no session yet, don't count it but still check yesterday.
+
     while (true) {
       const key = isoDate(cursor);
       if (daysWithSession.has(key)) {
@@ -167,7 +163,7 @@ function DashboardPage() {
   }
 
   return (
-    <div
+    <div className="page-shell"
       style={{
         minHeight: "100vh",
         backgroundColor: "var(--bg)",
@@ -177,7 +173,7 @@ function DashboardPage() {
     >
       <Navbar />
 
-      <main
+      <main className="page-content"
         style={{
           flex: 1,
           maxWidth: 1100,
@@ -191,18 +187,7 @@ function DashboardPage() {
       >
         {/* Heading */}
         <div>
-          <p
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "var(--accent)",
-              marginBottom: 6,
-            }}
-          >
-            Overview
-          </p>
+          
           <h1
             style={{
               fontSize: 24,
@@ -216,7 +201,7 @@ function DashboardPage() {
         </div>
 
         {/* Stat cards */}
-        <div
+        <div className="dashboard-stats-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
@@ -276,7 +261,7 @@ function DashboardPage() {
             Focus minutes per day (Mon–Sun)
           </p>
 
-          <div
+          <div className="dashboard-week-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(7, 1fr)",

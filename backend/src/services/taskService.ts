@@ -6,7 +6,7 @@ export const createTask = async (
     userId: string,
     title: string,
     deadline: Date,
-    priority: "low" | "medium" | "high"  //ts union types
+    priority: "low" | "medium" | "high"
 ) => {
     const task = await Task.create({
         user: userId,
@@ -24,7 +24,7 @@ export const getTasks = async (
     priority?: "low" | "medium" | "high",
     sort?: string
 ) => {
-    // Only return tasks belonging to the authenticated user.
+    //return tasks belonging to authenticated user
     const filter: {
         user: string;
         completed?: boolean;
@@ -33,7 +33,7 @@ export const getTasks = async (
         user: userId,
     };
 
-    // Filter by completion status when requested.
+    //filter by completion status when asked
     if (status === "completed") {
         filter.completed = true;
     }
@@ -42,17 +42,17 @@ export const getTasks = async (
         filter.completed = false;
     }
 
-    // Filter by priority when requested.
+    //filter by priority when asked
     if (priority) {
         filter.priority = priority;
     }
 
-    // Default: earliest deadline first.
+    //default: earliest deadline first
     let sortOption: Record<string, 1 | -1> = {
         deadline: 1,
     };
 
-    // Optional: newest tasks first.
+    //optional: newest tasks first
     if (sort === "created") {
         sortOption = {
             createdAt: -1,
@@ -88,18 +88,42 @@ export const updateTask = async (
         completed?: boolean;
     }
 ) => {
+    const updateFilter: { _id: string; user: string; deadline?: Date } = {
+        _id: taskId,
+        user: userId,
+    };
+    let keepExistingExpiredDeadline = false;
+    if (updates.deadline && updates.deadline.getTime() <= Date.now()) {
+        const existing = await Task.findOne({ _id: taskId, user: userId });
+        if (!existing) throw new ApiError(404, "Task not found");
+        const isUnchangedDeadline = existing.deadline.getTime() === updates.deadline.getTime();
+        if (!isUnchangedDeadline) {
+            throw new ApiError(400, "Deadline must be later than the current time");
+        }
+        updateFilter.deadline = existing.deadline;
+        keepExistingExpiredDeadline = true;
+    }
+
+    const finalUpdates: typeof updates & { completedAt?: Date | null } = { ...updates };
+    if (keepExistingExpiredDeadline) delete finalUpdates.deadline;
+    if (updates.completed === true) {
+        finalUpdates.completedAt = new Date();
+    } else if (updates.completed === false) {
+        finalUpdates.completedAt = null;
+    }
+
     const task = await Task.findOneAndUpdate(
         {
-            _id: taskId,
-            user: userId,
+            ...updateFilter,
         },
-        updates,
+        finalUpdates,
         {
             new: true,
             runValidators: true,
         }
     );
     if (!task) {
+        if (updateFilter.deadline) throw new ApiError(409, "Task changed while the deadline was being updated");
         throw new ApiError(404, "Task not found");
     }
     return task;

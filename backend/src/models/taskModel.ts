@@ -17,6 +17,10 @@ const taskSchema = new mongoose.Schema(
         deadline: {
             type: Date,
             required: true,
+            validate: {
+                validator: (deadline: Date) => deadline.getTime() > Date.now(),
+                message: "Deadline must be later than the current time",
+            },
         },
 
         priority: {
@@ -28,6 +32,11 @@ const taskSchema = new mongoose.Schema(
         completed: {
             type: Boolean,
             default: false,
+        },
+
+        completedAt: {
+            type: Date,
+            default: null,
         },
     },
     {

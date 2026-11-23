@@ -9,16 +9,19 @@ export const create = async (req: Request, res: Response) => {
         throw new ApiError(400, "Title is required");
     }
 
-    if (!deadline || isNaN(new Date(deadline).getTime())) { //new Date(deadline) turns incoming value into js date
-        //.getTime() gives a timestamp
+    const parsedDeadline = new Date(deadline);
+    if (typeof deadline !== "string" || !deadline || !Number.isFinite(parsedDeadline.getTime())) {
         throw new ApiError(400, "Valid deadline is required");
+    }
+    if (parsedDeadline.getTime() <= Date.now()) {
+        throw new ApiError(400, "Deadline must be later than the current time");
     }
 
     if (!["low", "medium", "high"].includes(priority)) {
         throw new ApiError(400, "Invalid priority");
     }
 
-    const task = await createTask(req.user!.userId, title, new Date(deadline), priority);
+    const task = await createTask(req.user!.userId, title, parsedDeadline, priority);
 
     res.status(201).json({
         message: "Task created successfully",
@@ -81,7 +84,7 @@ export const update = async (req: Request<{ id: string }>, res: Response) => {
         throw new ApiError(400, "Title must be a string");
     }
 
-    if (deadline !== undefined && isNaN(new Date(deadline).getTime())) {
+    if (deadline !== undefined && (typeof deadline !== "string" || !Number.isFinite(new Date(deadline).getTime()))) {
         throw new ApiError(400, "Invalid deadline");
     }
 

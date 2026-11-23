@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { apiRequest } from "../lib/api";
 
@@ -8,6 +8,7 @@ interface UserProfile {
   id?: string;
   name: string;
   email?: string;
+  username?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -24,7 +25,6 @@ function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Protect route: redirect guests to login
   useEffect(() => {
     if (!token) {
       navigate("/login", { replace: true });
@@ -44,7 +44,7 @@ function ProfilePage() {
           const message =
             err instanceof Error ? err.message : "Failed to load profile details";
           setError(message);
-          // If token is invalid or expired, clear and redirect
+          //if token invalid or expired, clear and redirect
           if (message.toLowerCase().includes("unauthorized") || message.toLowerCase().includes("token")) {
             localStorage.removeItem("focusage-token");
             window.dispatchEvent(new Event("focusage-auth-change"));
@@ -71,10 +71,8 @@ function ProfilePage() {
     navigate("/");
   }
 
-  // Derive display initial
-  const initial = user?.name ? user.name.trim().charAt(0).toUpperCase() : "U";
+  const initial = user?.name ? user.name.trim().charAt(0).toUpperCase() : "U"; //display initial
 
-  // Format created date if validly provided by backend
   const formattedCreatedDate = (() => {
     if (!user?.createdAt) return null;
     try {
@@ -90,10 +88,8 @@ function ProfilePage() {
     }
   })();
 
-  const userId = user?._id || user?.id || null;
-
   return (
-    <div
+    <div className="page-shell"
       style={{
         minHeight: "100vh",
         backgroundColor: "var(--bg)",
@@ -103,7 +99,7 @@ function ProfilePage() {
     >
       <Navbar />
 
-      <main
+      <main className="page-content"
         style={{
           flex: 1,
           maxWidth: 680,
@@ -115,7 +111,7 @@ function ProfilePage() {
           gap: 24,
         }}
       >
-        {/* Navigation Breadcrumb / Back link */}
+        {/* Navigation Back link */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <p
@@ -143,30 +139,7 @@ function ProfilePage() {
             </h1>
           </div>
 
-          <Link
-            to="/dashboard"
-            style={{
-              fontSize: 13,
-              fontWeight: 500,
-              color: "var(--text-secondary)",
-              textDecoration: "none",
-              padding: "6px 12px",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--surface-raised)",
-              transition: "background-color 0.12s, border-color 0.12s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--bg-inset)";
-              e.currentTarget.style.borderColor = "var(--border-strong)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--surface-raised)";
-              e.currentTarget.style.borderColor = "var(--border)";
-            }}
-          >
-            ← View Dashboard
-          </Link>
+
         </div>
 
         {/* Loading State */}
@@ -346,7 +319,7 @@ function ProfilePage() {
 
               <div style={{ padding: "8px 24px" }}>
                 {/* Full Name Row */}
-                <div
+                <div className="profile-detail-row"
                   style={{
                     display: "grid",
                     gridTemplateColumns: "160px 1fr",
@@ -364,8 +337,8 @@ function ProfilePage() {
                 </div>
 
                 {/* Email Address Row (only if present) */}
-                {user.email && (
-                  <div
+                {user.username && (
+                  <div className="profile-detail-row"
                     style={{
                       display: "grid",
                       gridTemplateColumns: "160px 1fr",
@@ -375,43 +348,18 @@ function ProfilePage() {
                     }}
                   >
                     <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 500 }}>
-                      Email Address
+                      Username
                     </span>
                     <span style={{ fontSize: 13, color: "var(--text-primary)", wordBreak: "break-all" }}>
-                      {user.email}
+                      {user.username}
                     </span>
                   </div>
                 )}
 
-                {/* Account ID Row (only if present) */}
-                {userId && (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "160px 1fr",
-                      padding: "14px 0",
-                      borderBottom: formattedCreatedDate ? "1px solid var(--border-soft)" : "none",
-                      alignItems: "baseline",
-                    }}
-                  >
-                    <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 500 }}>
-                      Account ID
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontFamily: "monospace",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {userId}
-                    </span>
-                  </div>
-                )}
 
                 {/* Account Created Date (only if present) */}
                 {formattedCreatedDate && (
-                  <div
+                  <div className="profile-detail-row"
                     style={{
                       display: "grid",
                       gridTemplateColumns: "160px 1fr",
@@ -433,41 +381,20 @@ function ProfilePage() {
             {/* Session Management / Log Out Card */}
             <section
               style={{
-                backgroundColor: "var(--surface-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: 10,
-                padding: "20px 24px",
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 16,
+                justifyContent: "center",
               }}
             >
-              <div>
-                <h3
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "var(--text-primary)",
-                    marginBottom: 2,
-                  }}
-                >
-                  Session
-                </h3>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-                  End your current session on this device.
-                </p>
-              </div>
-
               <button
                 type="button"
                 onClick={handleLogout}
                 style={{
+                  textAlign: "center",
                   backgroundColor: "var(--surface-raised)",
                   color: "#b91c1c",
                   border: "1px solid #f0b0b0",
                   borderRadius: 6,
-                  padding: "8px 18px",
+                  padding: "1px 18px",
                   fontSize: 13,
                   fontWeight: 500,
                   cursor: "pointer",

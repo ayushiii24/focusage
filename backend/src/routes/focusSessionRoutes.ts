@@ -1,16 +1,23 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import {
-    create,
+    start,
+    pause,
+    abandon,
+    resume,
+    complete,
     getAll,
 } from "../controllers/focusSessionController.js";
 
 const router = Router();
 
-// Record a completed focus session.
-router.post("/", authMiddleware, create);
+router.post("/start", authMiddleware, start);
+router.post("/pause", authMiddleware, pause);
+router.post("/abandon", authMiddleware, abandon);
+router.post("/resume", authMiddleware, resume);
+router.post("/complete", authMiddleware, complete);
 
-// Get the authenticated user's focus sessions.
+//get the authenticated users focus sessions
 router.get("/", authMiddleware, getAll);
 
 export default router;

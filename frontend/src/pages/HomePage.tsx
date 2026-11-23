@@ -24,12 +24,12 @@ function HomePage() {
     () => Boolean(localStorage.getItem("focusage-token"))
   );
 
-  // Real stats state — only populated from API for logged-in users.
+  //real users
   const [todayMinutes, setTodayMinutes] = useState<number | null>(null);
   const [todaySessions, setTodaySessions] = useState<number | null>(null);
   const [todayTasksDone, setTodayTasksDone] = useState<number | null>(null);
 
-  // Guest stats derived from localStorage.
+  //guest states from localStorage.
   const [guestTasksDone, setGuestTasksDone] = useState<number>(0);
   const [guestTasksTotal, setGuestTasksTotal] = useState<number>(0);
 
@@ -38,7 +38,7 @@ function HomePage() {
       const loggedIn = Boolean(localStorage.getItem("focusage-token"));
       setIsLoggedIn(loggedIn);
       if (!loggedIn) {
-        // Reset server stats when logging out.
+        //reset sv stats when logged out
         setTodayMinutes(null);
         setTodaySessions(null);
         setTodayTasksDone(null);
@@ -48,7 +48,7 @@ function HomePage() {
     return () => window.removeEventListener("focusage-auth-change", handleAuthChange);
   }, []);
 
-  // Fetch today's real stats for logged-in users.
+  //todays stats
   useEffect(() => {
     if (!isLoggedIn) return;
 
@@ -65,7 +65,7 @@ function HomePage() {
 
         if (cancelled) return;
 
-        // Filter sessions for today.
+        //todays session filter
         const todaySess = sessionsData.sessions.filter((s) => {
           const d = new Date(s.completedAt);
           return d >= start && d <= end;
@@ -76,26 +76,32 @@ function HomePage() {
           todaySess.reduce((sum, s) => sum + s.durationMinutes, 0)
         );
 
-        // Count tasks completed today.
+        //todays completed task count
         const done = tasksData.tasks.filter((t) => t.completed).length;
         setTodayTasksDone(done);
       } catch {
-        // Don't surface errors — stats are non-critical.
+
       }
     }
 
     void loadStats();
 
-    // Refresh stats whenever a focus session finishes (auth-change also fires on session complete events indirectly via page interaction).
+    const handleSessionComplete = () => { //refresh stats when a focus session completes
+      void loadStats();
+    };
+    const handleTasksChange = () => { void loadStats(); };
+    window.addEventListener("focusage-session-complete", handleSessionComplete);
+    window.addEventListener("focusage-tasks-change", handleTasksChange);
     const interval = window.setInterval(() => void loadStats(), 60_000);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focusage-session-complete", handleSessionComplete);
+      window.removeEventListener("focusage-tasks-change", handleTasksChange);
       window.clearInterval(interval);
     };
   }, [isLoggedIn]);
 
-  // Guest: read task counts from localStorage.
   useEffect(() => {
     if (isLoggedIn) return;
 
@@ -112,16 +118,18 @@ function HomePage() {
     }
 
     readGuestTasks();
+    window.addEventListener("focusage-tasks-change", readGuestTasks);
     window.addEventListener("storage", readGuestTasks);
     window.addEventListener("focusage-auth-change", readGuestTasks);
     return () => {
+      window.removeEventListener("focusage-tasks-change", readGuestTasks);
       window.removeEventListener("storage", readGuestTasks);
       window.removeEventListener("focusage-auth-change", readGuestTasks);
     };
   }, [isLoggedIn]);
 
   return (
-    <div
+    <div className="page-shell"
       style={{
         minHeight: "100vh",
         backgroundColor: "var(--bg)",
@@ -131,93 +139,14 @@ function HomePage() {
     >
       <Navbar />
 
-      <main
-        style={{
-          flex: 1,
-          maxWidth: 1100,
-          width: "100%",
-          margin: "0 auto",
-          padding: "40px 24px 48px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 32,
-        }}
-      >
-        {/* Page heading */}
-        <div>
-          <p
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "var(--accent)",
-              marginBottom: 6,
-            }}
-          >
-            Your workspace
-          </p>
-          <h1
-            style={{
-              fontSize: 24,
-              fontWeight: 600,
-              color: "var(--text-primary)",
-              letterSpacing: "-0.02em",
-              lineHeight: 1.2,
-            }}
-          >
-            Make today count.
-          </h1>
-        </div>
+      <main className="page-content home-page-content">
+        <header className="home-page-heading">
+          <h1>Make today count.</h1>
+        </header>
 
-        {/* Two-column workspace */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 20,
-            alignItems: "start",
-          }}
-        >
-          {/* Left column: Pomodoro timer */}
-          <div
-            style={{
-              backgroundColor: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              padding: "36px 32px 32px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-            }}
-          >
-            <PomodoroTimer />
-          </div>
-
-          {/* Right column: Task panel */}
-          <div
-            style={{
-              backgroundColor: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              padding: "24px 20px",
-              minHeight: 460,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <TaskSection />
-          </div>
-        </div>
-
-        {/* Summary strip — real data only */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 12,
-          }}
-        >
+        <div className="home-dashboard-grid">
+          <section className="home-dashboard-progress" aria-labelledby="today-progress-heading">
+            <h2 id="today-progress-heading">Today’s progress</h2>
           <SummaryCard
             label="Focus time today"
             value={
@@ -258,6 +187,15 @@ function HomePage() {
                 : guestTasksDone > 0
             }
           />
+          </section>
+
+          <section className="home-dashboard-timer" aria-label="Pomodoro timer">
+            <PomodoroTimer />
+          </section>
+
+          <section className="home-dashboard-tasks" aria-label="Task checklist">
+            <TaskSection />
+          </section>
         </div>
       </main>
     </div>
@@ -276,20 +214,13 @@ function SummaryCard({
   accent?: boolean;
 }) {
   return (
-    <div
-      style={{
-        backgroundColor: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        padding: "16px 18px",
-      }}
-    >
+    <div className="home-summary-item">
       <p
         style={{
-          fontSize: 11,
+          fontSize: 14,
           color: "var(--text-muted)",
           letterSpacing: "0.03em",
-          marginBottom: 6,
+          marginBottom: 0,
         }}
       >
         {label}
@@ -308,7 +239,7 @@ function SummaryCard({
       {note && (
         <p
           style={{
-            fontSize: 11,
+            fontSize: 13,
             color: "var(--text-muted)",
             marginTop: 4,
           }}
